@@ -1,3 +1,30 @@
+extern SPI_HandleTypeDef hspi1;
+
+//TODO: SPI_HandleTypeDef *NRF_SPI = &hspi1;
+
+void NRF_DefaultInit(void)
+{
+	NRF_CE_LOW;
+	NRF_Delay(1);
+	NRF_WriteReg(NRF_REG_EN_AA, 0x3f); //Enable auto Acknowledgment pipe1 0x3f
+  NRF_WriteReg(NRF_REG_EN_RXADDR, 0x03); // Enable rx address pipe1
+  NRF_WriteReg(NRF_REG_SETUP_AW, 0x03); // Address width 5 bytes
+	NRF_WriteReg(NRF_REG_SETUP_RETR, 0x5F); // 1500us, 15 retrans
+	NRF_WriteReg(NRF_REG_RF_CH, 0x60); // Set 96 channel
+	NRF_WriteReg(NRF_REG_RF_SETUP, 0x27); //0dBm, 250kbps
+	NRF_ToggleFeatures();
+	NRF_WriteReg(NRF_REG_FEATURE, 0x06);
+	NRF_WriteReg(NRF_REG_DYNPD, 0x3F); //Enable dynamic payloads on all pipes
+
+	uint8_t NRF_TX_Addr[] = {'1', 'N', 'o', 'd', 'e'};
+	uint8_t *NRF_RX_Addr = NRF_TX_Addr;
+	NRF_WriteMBReg(NRF_REG_RX_ADDR_P0, NRF_RX_Addr, 5);
+	NRF_WriteMBReg(NRF_REG_RX_ADDR_P1, NRF_RX_Addr, 5);
+
+	NRF_FlushRX();
+	NRF_FlushTX();
+}
+
 uint8_t NRF_ReadReg(uint8_t regAddr)
 {
 	uint8_t regValue = 0x00;
@@ -146,39 +173,6 @@ void NRF_GetPacket(uint8_t *buf)
 	NRF_WriteReg(NRF_REG_STATUS, _BV(RX_DR) | _BV(MAX_RT) | _BV(TX_DS));
 }
 
-
-/*
-void NRF_GetPacket(uint8_t *buf)
-{
-	uint8_t nop = 0xFF;
-	uint8_t reg = R_RX_PAYLOAD;
-
-	NRF_CSN_LOW;
-	HAL_SPI_Transmit(&hspi1, &reg, 1, 1000);
-
-	uint8_t currentBytePosition = -1;
-	uint8_t currentReadByte = 0;
-
-	char debugBuff[32];
-	while(++currentBytePosition < 32 && currentReadByte != '\n')
-	{
-		HAL_SPI_TransmitReceive(&hspi1, &nop, &currentReadByte, 1, 1000);
-		buf[currentBytePosition] = currentReadByte;
-		debugBuff[currentBytePosition] = currentReadByte;
-
-	}
-
-	uint8_t en_dpl = NRF_ReadReg(NRF_REG_FEATURE) & (1<<(2));
-	if(en_dpl)
-	{
-		uint8_t blank = 32 - currentBytePosition;
-		HAL_SPI_Transmit(&hspi1, &nop, blank, 1000);
-	}
-
-	NRF_CSN_HIGH;
-	NRF_WriteReg(NRF_REG_STATUS, _BV(RX_DR) | _BV(MAX_RT) | _BV(TX_DS));
-}
-*/
 bool NRF_SendPacket(uint8_t *receiverAddress,uint8_t *buf, uint8_t length, uint8_t writeType)
 {
 	NRF_WriteMBReg(NRF_REG_TX_ADDR, receiverAddress, 5);
@@ -220,12 +214,6 @@ bool NRF_SendPacket(uint8_t *receiverAddress,uint8_t *buf, uint8_t length, uint8
 bool NRF_IsAvailablePacket(void)
 {
 	return !(NRF_ReadReg(NRF_REG_FIFO_STATUS) & _BV(RX_EMPTY));
-}
-
-void NRF_ClearMessageBuff(void)
-{
-	for(int i = 0; i < NRF_MessageBuffSize; ++i)
-		NRF_MessageBuff[i] = 0;
 }
 
 __STATIC_INLINE void DelayMicro(__IO uint32_t micros)

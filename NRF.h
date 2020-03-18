@@ -93,9 +93,7 @@
 
 uint8_t NRF_CMD_NOP = 0xFF;
 
-bool NRF_AvailableMessage = false;
-#define NRF_MessageBuffSize 512
-uint8_t NRF_MessageBuff[NRF_MessageBuffSize];
+void NRF_DefaultInit(void);
 
 uint8_t NRF_ReadReg(uint8_t regAddr);
 void NRF_ReadMBReg(uint8_t regAddr, uint8_t *pBuf, uint8_t countBytes);
