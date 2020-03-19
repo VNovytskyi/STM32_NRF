@@ -91,9 +91,11 @@
 #define NRF_Delay(miliseconds) HAL_Delay(miliseconds)
 #define _BV(x) (1<<(x))
 
+#define NRF_MessageBuffSize 512
+
 uint8_t NRF_CMD_NOP = 0xFF;
 
-void NRF_DefaultInit(void);
+void NRF_SetDefaultSettings(void);
 
 uint8_t NRF_ReadReg(uint8_t regAddr);
 void NRF_ReadMBReg(uint8_t regAddr, uint8_t *pBuf, uint8_t countBytes);
@@ -107,14 +109,18 @@ void NRF24_FlushRX(void);
 void NRF24_FlushTX(void);
 
 void NRF_GetPacket(uint8_t *buf);
-bool NRF_SendPacket(uint8_t *receiverAddress,uint8_t *buf, uint8_t length, uint8_t writeType);
+int8_t NRF_SendPacket(uint8_t *receiverAddress, uint8_t *buf, uint8_t writeType);
+int8_t NRF_SendMessage(uint8_t *receiverAddress, uint8_t *buf);
 
 void NRF_RX_Mode(void);
 void NRF_TX_Mode(void);
 
 bool NRF_IsAvailablePacket(void);
+bool NRF_IsAvailableMessage(void);
 
 void NRF_ClearMessageBuff(void);
+
+void NRF_CallbackFunc(void);
 
 __STATIC_INLINE void DelayMicro(__IO uint32_t micros);
 

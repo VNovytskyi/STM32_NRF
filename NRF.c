@@ -2,10 +2,16 @@ extern SPI_HandleTypeDef hspi1;
 
 //TODO: SPI_HandleTypeDef *NRF_SPI = &hspi1;
 
-void NRF_DefaultInit(void)
+bool NRF_AvailablePacket = false;
+bool NRF_AvailableMessage = false;
+
+uint8_t NRF_MessageBuff[NRF_MessageBuffSize] = {0};
+
+void NRF_SetDefaultSettings(void)
 {
 	NRF_CE_LOW;
 	NRF_Delay(1);
+	NRF_WriteReg(NRF_REG_CONFIG, 0x02);
 	NRF_WriteReg(NRF_REG_EN_AA, 0x3f); //Enable auto Acknowledgment pipe1 0x3f
   NRF_WriteReg(NRF_REG_EN_RXADDR, 0x03); // Enable rx address pipe1
   NRF_WriteReg(NRF_REG_SETUP_AW, 0x03); // Address width 5 bytes
@@ -23,6 +29,12 @@ void NRF_DefaultInit(void)
 
 	NRF_FlushRX();
 	NRF_FlushTX();
+
+	NRF_AvailablePacket = false;
+	NRF_AvailableMessage = false;
+
+	NRF_ClearMessageBuff();
+  NRF_RX_Mode();
 }
 
 uint8_t NRF_ReadReg(uint8_t regAddr)
@@ -112,17 +124,23 @@ void NRF_RX_Mode(void)
 
   NRF_WriteReg(NRF_REG_CONFIG, regval);
 
+  if(!(regval & _BV(PWR_UP)))
+  	HAL_Delay(5);
+
   NRF_CE_HIGH;
 
-  NRF_Delay(1);
+  HAL_Delay(1);
 
   NRF_FlushRX();
   NRF_FlushTX();
+
+  HAL_Delay(5);
 }
 
 void NRF_TX_Mode(void)
 {
 	NRF_CE_LOW;
+	HAL_Delay(15);
 
 	uint8_t config = NRF_ReadReg(NRF_REG_CONFIG);
 
@@ -130,17 +148,17 @@ void NRF_TX_Mode(void)
 	{
 		config |= _BV(PWR_UP);
 		NRF_WriteReg(NRF_REG_CONFIG, config);
-		NRF_Delay(5); //1.5ms
+		HAL_Delay(5); //1.5ms
 	}
 
 	config = NRF_ReadReg(NRF_REG_CONFIG);
 	config &= ~_BV(PRIM_RX);
 	NRF_WriteReg(NRF_REG_CONFIG, config);
 
-	NRF_Delay(1);
-
 	NRF_FlushRX();
 	NRF_FlushTX();
+
+	HAL_Delay(5);
 }
 
 
@@ -173,26 +191,31 @@ void NRF_GetPacket(uint8_t *buf)
 	NRF_WriteReg(NRF_REG_STATUS, _BV(RX_DR) | _BV(MAX_RT) | _BV(TX_DS));
 }
 
-bool NRF_SendPacket(uint8_t *receiverAddress,uint8_t *buf, uint8_t length, uint8_t writeType)
+int8_t NRF_SendPacket(uint8_t *receiverAddress, uint8_t *buf, uint8_t writeType)
 {
-	NRF_WriteMBReg(NRF_REG_TX_ADDR, receiverAddress, 5);
+	if(receiverAddress != NULL)
+		NRF_WriteMBReg(NRF_REG_TX_ADDR, receiverAddress, 5);
 
-	uint8_t feature = NRF_ReadReg(NRF_REG_FEATURE);
-	bool en_dpl = feature & _BV(EN_DPL);
+	uint8_t dataLength = strlen(buf);
+	if(dataLength > 29)
+		return -2;
 
 	NRF_CSN_LOW;
 	HAL_SPI_Transmit(&hspi1, &writeType, 1, 1000);
-	HAL_SPI_Transmit(&hspi1, buf, length, 1000);
+	HAL_SPI_Transmit(&hspi1, &dataLength, 1, 1000);
+	HAL_SPI_Transmit(&hspi1, buf, dataLength, 1000);
 
+	bool en_dpl = NRF_ReadReg(NRF_REG_FEATURE) & _BV(EN_DPL);
 	if(!en_dpl)
 	{
-		uint8_t blank = 32 - length;
+		uint8_t blank = 32 - dataLength;
 		HAL_SPI_Transmit(&hspi1, &NRF_CMD_NOP, blank, 1000);
 	}
 	NRF_CSN_HIGH;
 
 	NRF_CE_HIGH;
-	DelayMicro(15);
+	DelayMicro(150);
+	//NRF_Delay(10);
 	NRF_CE_LOW;
 
 	uint8_t status = NRF_ReadReg(NRF_REG_STATUS);
@@ -200,20 +223,101 @@ bool NRF_SendPacket(uint8_t *receiverAddress,uint8_t *buf, uint8_t length, uint8
 	if(status & _BV(TX_DS))
 	{
 		NRF_WriteReg(NRF_REG_STATUS, 0x20);
-		return true;
+		return 1;
 	}
 
 	if(status & _BV(MAX_RT))
 	{
 		NRF_WriteReg(NRF_REG_STATUS, 0x10);
 		NRF_FlushTX();
-		return false;
+		return 0;
 	}
+
+	return -1;
+}
+
+int8_t NRF_SendMessage(uint8_t *receiverAddress, uint8_t *buf)
+{
+	NRF_WriteMBReg(NRF_REG_TX_ADDR, receiverAddress, 5);
+
+	uint16_t dataLength = strlen(buf);
+	uint8_t amountPackets = ceil((double)dataLength / 25.0);
+
+	NRF_TX_Mode();
+	HAL_Delay(10);
+	for(uint8_t i = 0; i < amountPackets; ++i)
+	{
+		uint8_t currentData[30] = {0};
+		memcpy(currentData, buf + (25 * i), 25);
+
+		int8_t result = NRF_SendPacket(NULL, currentData, W_TX_PAYLOAD);
+
+		if(!result)
+			return -1;
+
+		//TODO: Уменьшить значение
+		HAL_Delay(50);
+	}
+	HAL_Delay(10);
+	NRF_RX_Mode();
+
+	return 1;
 }
 
 bool NRF_IsAvailablePacket(void)
 {
 	return !(NRF_ReadReg(NRF_REG_FIFO_STATUS) & _BV(RX_EMPTY));
+}
+
+bool NRF_IsAvailableMessage(void)
+{
+	return NRF_AvailableMessage;
+}
+
+void NRF_ClearMessageBuff(void)
+{
+	for(int i = 0; i < NRF_MessageBuffSize; ++i)
+		NRF_MessageBuff[i] = 0;
+}
+
+void NRF_CallbackFunc(void)
+{
+	//char *buff = "NRF";
+		//HAL_UART_Transmit(&huart1, buff, strlen(buff), 100);
+
+	//char *buff = "_IRQ: ";
+	//HAL_UART_Transmit(&huart1, buff, strlen(buff), 100);
+
+	if(!(NRF_ReadReg(NRF_REG_FIFO_STATUS) & _BV(RX_EMPTY)))
+	{
+		NRF_AvailablePacket = true;
+		//char *buff = "RX FIFO not empty\n";
+		//HAL_UART_Transmit(&huart1, buff, strlen(buff), 100);
+	}
+
+	/*
+	uint8_t status = NRF_ReadReg(NRF_REG_STATUS);
+	HAL_UART_Transmit(&huart1, &status, 1, 100);
+
+	if(status & _BV(RX_DR))
+	{
+		char *buff = "RX_DR\n";
+		HAL_UART_Transmit(&huart1, buff, strlen(buff), 100);
+	}
+
+	if(status & _BV(TX_DS))
+	{
+		char *buff = "TX_DS\n";
+		HAL_UART_Transmit(&huart1, buff, strlen(buff), 100);
+	}
+
+	if(status & _BV(MAX_RT))
+	{
+		char *buff = "MAX_RT\n";
+		HAL_UART_Transmit(&huart1, buff, strlen(buff), 100);
+	}
+*/
+
 }
 
 __STATIC_INLINE void DelayMicro(__IO uint32_t micros)
