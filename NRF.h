@@ -91,7 +91,8 @@
 #define NRF_Delay(miliseconds) HAL_Delay(miliseconds)
 #define _BV(x) (1<<(x))
 
-#define NRF_MessageBuffSize 512
+#define NRF_txBuffSize 32
+#define NRF_rxBuffSize 32
 
 uint8_t NRF_CMD_NOP = 0xFF;
 
@@ -118,7 +119,8 @@ void NRF_TX_Mode(void);
 bool NRF_IsAvailablePacket(void);
 bool NRF_IsAvailableMessage(void);
 
-void NRF_ClearMessageBuff(void);
+void NRF_ClearRxBuff(void);
+void NRF_ClearTxBuff(void);
 
 void NRF_CallbackFunc(void);
 

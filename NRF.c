@@ -2,10 +2,8 @@ extern SPI_HandleTypeDef hspi1;
 
 //TODO: SPI_HandleTypeDef *NRF_SPI = &hspi1;
 
-bool NRF_AvailablePacket = false;
-bool NRF_AvailableMessage = false;
-
-uint8_t NRF_MessageBuff[NRF_MessageBuffSize] = {0};
+uint8_t NRF_txBuff[NRF_txBuffSize];
+uint8_t NRF_rxBuff[NRF_rxBuffSize];
 
 void NRF_SetDefaultSettings(void)
 {
@@ -19,21 +17,25 @@ void NRF_SetDefaultSettings(void)
 	NRF_WriteReg(NRF_REG_RF_CH, 0x60); // Set 96 channel
 	NRF_WriteReg(NRF_REG_RF_SETUP, 0x27); //0dBm, 250kbps
 	NRF_ToggleFeatures();
-	NRF_WriteReg(NRF_REG_FEATURE, 0x06);
+	NRF_WriteReg(NRF_REG_FEATURE, 0x07);
 	NRF_WriteReg(NRF_REG_DYNPD, 0x3F); //Enable dynamic payloads on all pipes
 
-	uint8_t NRF_TX_Addr[] = {'1', 'N', 'o', 'd', 'e'};
-	uint8_t *NRF_RX_Addr = NRF_TX_Addr;
-	NRF_WriteMBReg(NRF_REG_RX_ADDR_P0, NRF_RX_Addr, 5);
-	NRF_WriteMBReg(NRF_REG_RX_ADDR_P1, NRF_RX_Addr, 5);
+	//Main hub
+	uint8_t NRF_TX_Addr[] = {1, 1, 1, 1, 1};
+	NRF_WriteMBReg(NRF_REG_TX_ADDR, NRF_TX_Addr, 5);
+
+	uint8_t NRF_RX0_Addr[] = {1, 1, 1, 1, 1};
+	NRF_WriteMBReg(NRF_REG_RX_ADDR_P0, NRF_RX0_Addr, 5);
+
+	uint8_t NRF_RX1_Addr[] = {2, 1, 1, 1, 1};
+	NRF_WriteMBReg(NRF_REG_RX_ADDR_P1, NRF_RX1_Addr, 5);
 
 	NRF_FlushRX();
 	NRF_FlushTX();
 
-	NRF_AvailablePacket = false;
-	NRF_AvailableMessage = false;
+	NRF_ClearTxBuff();
+	NRF_ClearRxBuff();
 
-	NRF_ClearMessageBuff();
   NRF_RX_Mode();
 }
 
@@ -180,11 +182,12 @@ void NRF_GetPacket(uint8_t *buf)
 
 	HAL_SPI_TransmitReceive(&hspi1, &nop, buf, dataLength, 1000);
 
-	uint8_t en_dpl = NRF_ReadReg(NRF_REG_FEATURE) & (1<<(2));
-	if(en_dpl)
+	uint8_t feature = NRF_ReadReg(NRF_REG_FEATURE);
+	uint8_t en_dpl = feature & (1<<(2));
+	if(!en_dpl)
 	{
 		uint8_t blank = 32 - dataLength;
-		HAL_SPI_Transmit(&hspi1, &nop, blank, 1000);
+		//HAL_SPI_Transmit(&hspi1, &nop, blank, 1000);
 	}
 
 	NRF_CSN_HIGH;
@@ -269,15 +272,16 @@ bool NRF_IsAvailablePacket(void)
 	return !(NRF_ReadReg(NRF_REG_FIFO_STATUS) & _BV(RX_EMPTY));
 }
 
-bool NRF_IsAvailableMessage(void)
+void NRF_ClearRxBuff(void)
 {
-	return NRF_AvailableMessage;
+	for(int i = 0; i < NRF_rxBuffSize; ++i)
+		NRF_rxBuff[i] = 0;
 }
 
-void NRF_ClearMessageBuff(void)
+void NRF_ClearTxBuff(void)
 {
-	for(int i = 0; i < NRF_MessageBuffSize; ++i)
-		NRF_MessageBuff[i] = 0;
+	for(int i = 0; i < NRF_txBuffSize; ++i)
+			NRF_txBuff[i] = 0;
 }
 
 void NRF_CallbackFunc(void)
@@ -290,7 +294,7 @@ void NRF_CallbackFunc(void)
 
 	if(!(NRF_ReadReg(NRF_REG_FIFO_STATUS) & _BV(RX_EMPTY)))
 	{
-		NRF_AvailablePacket = true;
+		//NRF_AvailablePacket = true;
 		//char *buff = "RX FIFO not empty\n";
 		//HAL_UART_Transmit(&huart1, buff, strlen(buff), 100);
 	}
