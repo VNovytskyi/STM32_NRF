@@ -5,7 +5,7 @@ extern SPI_HandleTypeDef hspi1;
 uint8_t NRF_txBuff[NRF_txBuffSize];
 uint8_t NRF_rxBuff[NRF_rxBuffSize];
 
-void NRF_SetDefaultSettings(void)
+void NRF_Init(uint8_t *NRF_TX_Addr, uint8_t *NRF_RX1_Addr)
 {
 	NRF_CE_LOW;
 	NRF_Delay(1);
@@ -20,14 +20,9 @@ void NRF_SetDefaultSettings(void)
 	NRF_WriteReg(NRF_REG_FEATURE, 0x07);
 	NRF_WriteReg(NRF_REG_DYNPD, 0x3F); //Enable dynamic payloads on all pipes
 
-	//Main hub
-	uint8_t NRF_TX_Addr[] = {1, 1, 1, 1, 1};
 	NRF_WriteMBReg(NRF_REG_TX_ADDR, NRF_TX_Addr, 5);
+	NRF_WriteMBReg(NRF_REG_RX_ADDR_P0, NRF_TX_Addr, 5);
 
-	uint8_t NRF_RX0_Addr[] = {1, 1, 1, 1, 1};
-	NRF_WriteMBReg(NRF_REG_RX_ADDR_P0, NRF_RX0_Addr, 5);
-
-	uint8_t NRF_RX1_Addr[] = {2, 1, 1, 1, 1};
 	NRF_WriteMBReg(NRF_REG_RX_ADDR_P1, NRF_RX1_Addr, 5);
 
 	NRF_FlushRX();
@@ -248,19 +243,31 @@ int8_t NRF_SendMessage(uint8_t *receiverAddress, uint8_t *buf)
 
 	NRF_TX_Mode();
 	HAL_Delay(10);
-	for(uint8_t i = 0; i < amountPackets; ++i)
-	{
-		uint8_t currentData[30] = {0};
-		memcpy(currentData, buf + (25 * i), 25);
 
-		int8_t result = NRF_SendPacket(NULL, currentData, W_TX_PAYLOAD);
+	if(amountPackets == 1)
+	{
+		int8_t result = NRF_SendPacket(NULL, buf, W_TX_PAYLOAD);
 
 		if(!result)
 			return -1;
-
-		//TODO: Уменьшить значение
-		HAL_Delay(50);
 	}
+	else
+	{
+		for(uint8_t i = 0; i < amountPackets; ++i)
+		{
+			uint8_t currentData[30] = {0};
+			memcpy(currentData, buf + (25 * i), 25);
+
+			int8_t result = NRF_SendPacket(NULL, currentData, W_TX_PAYLOAD);
+
+			if(!result)
+				return -1;
+
+			//TODO: Уменьшить значение
+			HAL_Delay(50);
+		}
+	}
+
 	HAL_Delay(10);
 	NRF_RX_Mode();
 
