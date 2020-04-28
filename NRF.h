@@ -1,6 +1,3 @@
-#ifndef NRF_H_
-#define NRF_H_
-
 /* Bit Mnemonics */
 #define MASK_RX_DR  6
 #define MASK_TX_DS  5
@@ -87,7 +84,6 @@
 #define R_RX_PAYLOAD  0x61
 #define W_TX_PAYLOAD 0xA0
 
-
 #define NRF_Delay(miliseconds) HAL_Delay(miliseconds)
 #define _BV(x) (1<<(x))
 
@@ -96,22 +92,29 @@
 
 uint8_t NRF_CMD_NOP = 0xFF;
 
-void NRF_SetDefaultSettings(void);
+uint8_t NRF_txBuff[NRF_txBuffSize];
+uint8_t NRF_rxBuff[NRF_rxBuffSize];
+
+void NRF_Init(const uint8_t *NRF_TX_Addr, const uint8_t *NRF_RX1_Addr);
 
 uint8_t NRF_ReadReg(uint8_t regAddr);
 void NRF_ReadMBReg(uint8_t regAddr, uint8_t *pBuf, uint8_t countBytes);
 
 void NRF_WriteReg(uint8_t regAddr, uint8_t regValue);
-void NRF_WriteMBReg(uint8_t regAddr, uint8_t *pBuf, uint8_t countBytes);
+void NRF_WriteMBReg(uint8_t regAddr, const uint8_t *pBuf, uint8_t countBytes);
+
+void NRF_ON(void);
+void NRF_OFF(void);
 
 void NRF_ToggleFeatures(void);
 
-void NRF24_FlushRX(void);
-void NRF24_FlushTX(void);
+void NRF_FlushRX(void);
+void NRF_FlushTX(void);
 
-void NRF_GetPacket(uint8_t *buf);
-int8_t NRF_SendPacket(uint8_t *receiverAddress, uint8_t *buf, uint8_t writeType);
-int8_t NRF_SendMessage(uint8_t *receiverAddress, uint8_t *buf);
+int8_t NRF_GetPacket(uint8_t *buf);
+int8_t NRF_SendPacket(uint8_t *receiverAddress, uint8_t *buf, uint8_t dataLength, uint8_t writeType);
+int8_t NRF_SendOnePacketTo(uint8_t *receiverAddress, uint8_t *buf, uint8_t dataLength, uint8_t attemptCount, uint8_t delayBetweenAttemps);
+int8_t NRF_SendMessage(const uint8_t *receiverAddress, const uint8_t *buf);
 
 void NRF_RX_Mode(void);
 void NRF_TX_Mode(void);
@@ -124,8 +127,10 @@ void NRF_ClearTxBuff(void);
 
 void NRF_CallbackFunc(void);
 
+uint8_t NRF_GetStatus(void);
+
+uint8_t NRF_GetPipeNum(void);
+
 __STATIC_INLINE void DelayMicro(__IO uint32_t micros);
 
-
 #include "NRF.c"
-#endif
